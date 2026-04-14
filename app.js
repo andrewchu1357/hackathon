@@ -59,7 +59,6 @@ function startScanner() {
     }
   );
 
-  // IMPORTANT: this was missing!
   Quagga.onDetected(onBarcodeDetected);
 }
 
