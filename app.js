@@ -83,14 +83,33 @@ startScannerBtn.addEventListener("click", startScanner);
 stopScannerBtn.addEventListener("click", stopScanner);
 
 // ----------------------
-// TARGET API LOOKUP
+// TIMEOUT HELPER
+// ----------------------
+function fetchWithTimeout(url, ms = 3000) {
+  return new Promise((resolve) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, ms);
+
+    fetch(url, { signal: controller.signal })
+      .then(res => {
+        clearTimeout(timer);
+        if (!res.ok) return resolve(null);
+        res.json().then(json => resolve(json)).catch(() => resolve(null));
+      })
+      .catch(() => resolve(null));
+  });
+}
+
+// ----------------------
+// TARGET API LOOKUP (SAFE)
 // ----------------------
 async function lookupTCIN(upc) {
   const url = `https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v1?key=ff457966e64d1e877fdbad070f276d8e&keyword=${upc}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  const data = await fetchWithTimeout(url);
 
-  const data = await res.json();
   const items = data?.data?.search?.products;
   if (!items || items.length === 0) return null;
 
@@ -99,10 +118,8 @@ async function lookupTCIN(upc) {
 
 async function searchTargetByName(name) {
   const url = `https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v1?key=ff457966e64d1e877fdbad070f276d8e&keyword=${encodeURIComponent(name)}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  const data = await fetchWithTimeout(url);
 
-  const data = await res.json();
   const items = data?.data?.search?.products;
   if (!items || items.length === 0) return null;
 
@@ -111,10 +128,8 @@ async function searchTargetByName(name) {
 
 async function getTargetPrice(tcin) {
   const url = `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=ff457966e64d1e877fdbad070f276d8e&tcin=${tcin}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  const data = await fetchWithTimeout(url);
 
-  const data = await res.json();
   const item = data?.data?.product?.item;
   if (!item) return null;
 
@@ -129,11 +144,9 @@ async function getTargetPrice(tcin) {
 // ----------------------
 async function lookupUPCitemDB(upc) {
   const url = `https://api.upcitemdb.com/prod/trial/lookup?upc=${upc}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  const data = await fetchWithTimeout(url);
 
-  const data = await res.json();
-  if (!data.items || data.items.length === 0) return null;
+  if (!data?.items || data.items.length === 0) return null;
 
   const item = data.items[0];
   return {
@@ -144,11 +157,9 @@ async function lookupUPCitemDB(upc) {
 
 async function searchUPCitemDBByName(name) {
   const url = `https://api.upcitemdb.com/prod/trial/search?s=${encodeURIComponent(name)}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
+  const data = await fetchWithTimeout(url);
 
-  const data = await res.json();
-  if (!data.items || data.items.length === 0) return null;
+  if (!data?.items || data.items.length === 0) return null;
 
   const item = data.items[0];
   return {
@@ -187,13 +198,13 @@ async function checkDeal() {
     const tcin = await lookupTCIN(upc);
     if (tcin) {
       info = await getTargetPrice(tcin);
-      if (info && info.price) source = "Target";
+      if (info?.price) source = "Target";
     }
 
-    if (!info || !info.price) {
+    if (!info?.price) {
       statusEl.textContent = "Checking UPCitemDB…";
       info = await lookupUPCitemDB(upc);
-      if (info && info.price) source = "UPCitemDB";
+      if (info?.price) source = "UPCitemDB";
     }
   }
 
@@ -204,17 +215,17 @@ async function checkDeal() {
     const tcin = await searchTargetByName(name);
     if (tcin) {
       info = await getTargetPrice(tcin);
-      if (info && info.price) source = "Target";
+      if (info?.price) source = "Target";
     }
 
-    if (!info || !info.price) {
+    if (!info?.price) {
       statusEl.textContent = "Searching UPCitemDB…";
       info = await searchUPCitemDBByName(name);
-      if (info && info.price) source = "UPCitemDB";
+      if (info?.price) source = "UPCitemDB";
     }
   }
 
-  if (!info || !info.price) {
+  if (!info?.price) {
     statusEl.textContent = "";
     resultEl.textContent = "No online price found.";
     return;
