@@ -67,8 +67,8 @@ button {
 
 /* Force Quagga's injected video to match the small box */
 #scanner video {
-  width: 180px !important;
-  height: 120px !important;
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover;
 }
 
