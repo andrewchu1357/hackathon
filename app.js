@@ -85,7 +85,7 @@ stopScannerBtn.addEventListener("click", stopScanner);
 // ----------------------
 // TIMEOUT HELPER
 // ----------------------
-function fetchWithTimeout(url, ms = 4000) {
+function fetchWithTimeout(url, ms = 5000) {
   return new Promise((resolve) => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -110,58 +110,19 @@ function fetchWithTimeout(url, ms = 4000) {
 }
 
 // ----------------------
-// TARGET API LOOKUP
+// OPENFOODFACTS UPC LOOKUP
 // ----------------------
-async function lookupTCIN(upc) {
-  const url = `https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v1?key=ff457966e64d1e877fdbad070f276d8e&keyword=${upc}`;
+async function lookupOpenFoodFacts(upc) {
+  const url = `https://world.openfoodfacts.org/api/v0/product/${upc}.json`;
   const data = await fetchWithTimeout(url);
-  const items = data?.data?.search?.products;
-  return items?.length ? items[0].tcin : null;
-}
 
-async function searchTargetByName(name) {
-  const url = `https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v1?key=ff457966e64d1e877fdbad070f276d8e&keyword=${encodeURIComponent(name)}`;
-  const data = await fetchWithTimeout(url);
-  const items = data?.data?.search?.products;
-  return items?.length ? items[0].tcin : null;
-}
+  if (!data || data.status !== 1) return null;
 
-async function getTargetPrice(tcin) {
-  const url = `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=ff457966e64d1e877fdbad070f276d8e&tcin=${tcin}`;
-  const data = await fetchWithTimeout(url);
-  const item = data?.data?.product?.item;
-  if (!item) return null;
+  const product = data.product;
 
   return {
-    title: item.product_description?.title,
-    price: item.price?.current_retail
-  };
-}
-
-// ----------------------
-// UPCitemDB FALLBACK
-// ----------------------
-async function lookupUPCitemDB(upc) {
-  const url = `https://api.upcitemdb.com/prod/trial/lookup?upc=${upc}`;
-  const data = await fetchWithTimeout(url);
-  if (!data?.items?.length) return null;
-
-  const item = data.items[0];
-  return {
-    title: item.title,
-    price: item.lowest_recorded_price || item.highest_recorded_price || null
-  };
-}
-
-async function searchUPCitemDBByName(name) {
-  const url = `https://api.upcitemdb.com/prod/trial/search?s=${encodeURIComponent(name)}`;
-  const data = await fetchWithTimeout(url);
-  if (!data?.items?.length) return null;
-
-  const item = data.items[0];
-  return {
-    title: item.title,
-    price: item.lowest_recorded_price || item.highest_recorded_price || null
+    title: product.product_name || product.generic_name || null,
+    brand: product.brands || null
   };
 }
 
@@ -170,7 +131,7 @@ async function searchUPCitemDBByName(name) {
 // ----------------------
 async function googleShoppingSearch(query) {
   const url = `https://corsproxy.io/?https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}`;
-  const html = await fetchWithTimeout(url, 5000);
+  const html = await fetchWithTimeout(url, 6000);
   if (!html) return null;
 
   const text = typeof html === "string" ? html : JSON.stringify(html);
@@ -216,49 +177,41 @@ async function guessNameFromUPC(upc) {
 async function getBestOnlinePrice(upc, name) {
   let info = null;
 
-  // 1. Target by UPC
+  // 1. OpenFoodFacts → Google Shopping
   if (upc) {
-    const tcin = await lookupTCIN(upc);
-    if (tcin) {
-      info = await getTargetPrice(tcin);
-      if (info?.price) return { ...info, source: "Target" };
+    const off = await lookupOpenFoodFacts(upc);
+    if (off?.title) {
+      const google = await googleShoppingSearch(off.title);
+      if (google?.price) {
+        return {
+          title: off.title,
+          price: google.price,
+          source: "Google Shopping (via OpenFoodFacts)"
+        };
+      }
+      name = off.title;
     }
   }
 
-  // 2. UPCitemDB by UPC
-  if (upc) {
-    info = await lookupUPCitemDB(upc);
-    if (info?.price) return { ...info, source: "UPCitemDB" };
-  }
-
-  // 3. Target by name
+  // 2. Google Shopping by name
   if (name) {
-    const tcin = await searchTargetByName(name);
-    if (tcin) {
-      info = await getTargetPrice(tcin);
-      if (info?.price) return { ...info, source: "Target" };
-    }
+    info = await googleShoppingSearch(name);
+    if (info?.price) return { ...info, source: "Google Shopping" };
   }
 
-  // 4. UPCitemDB by name
-  if (name) {
-    info = await searchUPCitemDBByName(name);
-    if (info?.price) return { ...info, source: "UPCitemDB" };
-  }
-
-  // 5. Gemini guess → Google Shopping
+  // 3. Gemini guess → Google Shopping
   if (upc && !name) {
     const guessed = await guessNameFromUPC(upc);
     if (guessed) {
       info = await googleShoppingSearch(guessed);
-      if (info?.price) return { ...info, source: "Google Shopping (AI guessed)" };
+      if (info?.price) {
+        return {
+          title: guessed,
+          price: info.price,
+          source: "Google Shopping (AI guessed)"
+        };
+      }
     }
-  }
-
-  // 6. Google Shopping by name
-  if (name) {
-    info = await googleShoppingSearch(name);
-    if (info?.price) return { ...info, source: "Google Shopping" };
   }
 
   return null;
