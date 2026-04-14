@@ -31,13 +31,20 @@ function startScanner() {
         target: document.querySelector("#scanner"),
         constraints: {
           facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
       },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: 2,
+      frequency: 10,
       decoder: {
         readers: ["ean_13_reader", "upc_reader"]
-      }
+      },
+      locate: true
     },
     err => {
       if (err) {
@@ -52,6 +59,7 @@ function startScanner() {
     }
   );
 
+  // IMPORTANT: this was missing!
   Quagga.onDetected(onBarcodeDetected);
 }
 
@@ -173,9 +181,7 @@ async function checkDeal() {
   let info = null;
   let source = "";
 
-  // ----------------------
-  // UPC SEARCH PATH
-  // ----------------------
+  // UPC SEARCH
   if (upc) {
     statusEl.textContent = "Checking Target…";
 
@@ -192,9 +198,7 @@ async function checkDeal() {
     }
   }
 
-  // ----------------------
-  // NAME SEARCH PATH
-  // ----------------------
+  // NAME SEARCH
   if (!upc && name) {
     statusEl.textContent = "Searching Target by name…";
 
@@ -211,18 +215,12 @@ async function checkDeal() {
     }
   }
 
-  // ----------------------
-  // NO PRICE FOUND
-  // ----------------------
   if (!info || !info.price) {
     statusEl.textContent = "";
     resultEl.textContent = "No online price found.";
     return;
   }
 
-  // ----------------------
-  // DEAL EVALUATION
-  // ----------------------
   const onlinePrice = info.price;
   let verdict = "";
 
