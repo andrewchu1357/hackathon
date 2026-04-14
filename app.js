@@ -172,7 +172,7 @@ async function guessNameFromUPC(upc) {
 }
 
 // ----------------------
-// UNIFIED PRICE LOOKUP
+// UNIFIED PRICE LOOKUP (NO UPCitemDB)
 // ----------------------
 async function getBestOnlinePrice(upc, name) {
   let info = null;
