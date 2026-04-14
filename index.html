@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Price Checker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <h1>Is This a Good Deal?</h1>
+
+    <label>Item name (optional)</label>
+    <input id="itemName" type="text" placeholder="e.g. Jif Peanut Butter" />
+
+    <label>Barcode (UPC)</label>
+    <input id="barcode" type="text" placeholder="Scan or type barcode" />
+
+    <label>Store price (USD)</label>
+    <input id="storePrice" type="number" step="0.01" placeholder="e.g. 3.95" />
+
+    <button id="startScannerBtn">Open Camera & Scan</button>
+    <button id="stopScannerBtn" style="display:none;">Stop Scanner</button>
+
+    <div id="scanner-container">
+      <div id="scanner"></div>
+      <p id="scannerStatus"></p>
+    </div>
+
+    <button id="checkBtn" class="primary">Check Price</button>
+
+    <p id="status"></p>
+    <pre id="result"></pre>
+  </div>
+
+  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
