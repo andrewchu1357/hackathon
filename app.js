@@ -97,13 +97,7 @@ function fetchWithTimeout(url, ms = 5000) {
       .then(res => {
         clearTimeout(timer);
         if (!res.ok) return resolve(null);
-        res.text().then(text => {
-          try {
-            resolve(JSON.parse(text));
-          } catch {
-            resolve(text);
-          }
-        });
+        res.json().then(resolve).catch(() => resolve(null));
       })
       .catch(() => resolve(null));
   });
@@ -121,109 +115,17 @@ async function lookupOpenFoodFacts(upc) {
   const product = data.product;
 
   return {
-    title: product.product_name || product.generic_name || null,
-    brand: product.brands || null
+    title: product.product_name || product.generic_name || "Unknown product",
+    brand: product.brands || "Unknown brand"
   };
 }
 
 // ----------------------
-// GOOGLE SHOPPING SCRAPER
-// ----------------------
-async function googleShoppingSearch(query) {
-  const url = `https://corsproxy.io/?https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}`;
-  const html = await fetchWithTimeout(url, 6000);
-  if (!html) return null;
-
-  const text = typeof html === "string" ? html : JSON.stringify(html);
-  const priceMatch = text.match(/\$\d+\.\d{2}/);
-
-  if (!priceMatch) return null;
-
-  return {
-    title: query,
-    price: parseFloat(priceMatch[0].replace("$", ""))
-  };
-}
-
-// ----------------------
-// GEMINI UPC → NAME
-// ----------------------
-async function guessNameFromUPC(upc) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyAlus5j7IGwc0LWn3nU6VajSU3Uk4Pl7rM`;
-
-  const body = {
-    contents: [{
-      parts: [{
-        text: `What product is this UPC for? Return ONLY the product name: ${upc}`
-      }]
-    }]
-  };
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-
-  const data = await res.json().catch(() => null);
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  return text?.trim() || null;
-}
-
-// ----------------------
-// UNIFIED PRICE LOOKUP (NO UPCitemDB)
-// ----------------------
-async function getBestOnlinePrice(upc, name) {
-  let info = null;
-
-  // 1. OpenFoodFacts → Google Shopping
-  if (upc) {
-    const off = await lookupOpenFoodFacts(upc);
-    if (off?.title) {
-      const google = await googleShoppingSearch(off.title);
-      if (google?.price) {
-        return {
-          title: off.title,
-          price: google.price,
-          source: "Google Shopping (via OpenFoodFacts)"
-        };
-      }
-      name = off.title;
-    }
-  }
-
-  // 2. Google Shopping by name
-  if (name) {
-    info = await googleShoppingSearch(name);
-    if (info?.price) return { ...info, source: "Google Shopping" };
-  }
-
-  // 3. Gemini guess → Google Shopping
-  if (upc && !name) {
-    const guessed = await guessNameFromUPC(upc);
-    if (guessed) {
-      info = await googleShoppingSearch(guessed);
-      if (info?.price) {
-        return {
-          title: guessed,
-          price: info.price,
-          source: "Google Shopping (AI guessed)"
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-// ----------------------
-// MAIN CHECK FUNCTION
+// MAIN CHECK FUNCTION (NO PRICE LOGIC)
 // ----------------------
 async function checkDeal() {
   const upc = barcodeInput.value.trim();
   const name = itemNameInput.value.trim();
-  const storePrice = parseFloat(storePriceInput.value.trim());
 
   resultEl.textContent = "";
   statusEl.textContent = "";
@@ -232,34 +134,27 @@ async function checkDeal() {
     statusEl.textContent = "Enter a barcode OR an item name.";
     return;
   }
-  if (!storePrice) {
-    statusEl.textContent = "Enter the store price.";
-    return;
+
+  statusEl.textContent = "Looking up product…";
+
+  let info = null;
+
+  // Only UPC lookup now
+  if (upc) {
+    info = await lookupOpenFoodFacts(upc);
   }
-
-  statusEl.textContent = "Searching online…";
-
-  const info = await getBestOnlinePrice(upc, name);
 
   if (!info) {
     statusEl.textContent = "";
-    resultEl.textContent = "No online price found.";
+    resultEl.textContent = "Product not found in OpenFoodFacts.";
     return;
   }
 
-  const onlinePrice = info.price;
-  let verdict = "";
-
-  if (storePrice < onlinePrice) verdict = "GOOD DEAL 👍";
-  else if (storePrice === onlinePrice) verdict = "AVERAGE DEAL 😐";
-  else verdict = "OVERPRICED 👎";
-
+  // Display product info only
   resultEl.textContent =
-    `Source: ${info.source}\n` +
-    `Item: ${info.title}\n` +
-    `Online Price: $${onlinePrice.toFixed(2)}\n` +
-    `Store Price: $${storePrice.toFixed(2)}\n\n` +
-    `Verdict: ${verdict}`;
+    `Product: ${info.title}\n` +
+    `Brand: ${info.brand}\n` +
+    `UPC: ${upc}`;
 
   statusEl.textContent = "";
 }
